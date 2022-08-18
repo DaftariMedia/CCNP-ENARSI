@@ -1,0 +1,123 @@
+CUSTOMER_A:
+PE1:
+conf t
+int gi0/0
+mpls ip
+
+P:
+conf t
+int gi0/0
+mpls ip
+int gi0/3
+mpls ip
+
+PE1:
+conf t
+int gi0/3
+mpls ip
+
+show mpls interfaces
+traceroute 3.3.3.3 source loopb 0
+
+*************************************
+~VRFs~
+PE1:
+conf t
+ip vrf CUSTOMER_A
+rd 100:1
+route-target both 100:10
+do show run | sec vrf
+exit
+int gi0/1
+ip vrf forwarding CUSTOMER_A
+ip add 24.0.0.2 255.255.255.0
+no shut
+do ping vrf CUSTOMER_A 24.0.0.4
+
+PE2:
+conf t
+ip vrf CUSTOMER_A
+rd 100:1
+route-target both 100:10
+do show run | sec vrf
+exit
+int gi0/1
+ip vrf forwarding CUSTOMER_A
+ip add 35.0.0.3 255.255.255.0
+no shut
+do ping vrf CUSTOMER_A 35.0.0.5
+*************************************
+
+~iBGP~
+PE1:
+router bgp 100
+neighbor 3.3.3.3 remote-as 100
+neighbor 3.3.3.3 update-source loopb 0
+address-family vpnv4
+neighbor 3.3.3.3 activate
+do show run | section bgp
+exit
+address-family ipv4
+no neighbor 3.3.3.3 activate
+do show run | section bgp
+do show bgp vpnv4 unicast all summary
+
+PE2:
+router bgp 100
+neighbor 2.2.2.2 remote-as 100
+neighbor 2.2.2.2 update-source loopb 0
+address-family vpnv4
+neighbor 2.2.2.2 activate
+do show run | section bgp
+exit
+address-family ipv4
+no neighbor 2.2.2.2 activate
+do show run | section bgp
+do show bgp vpnv4 unicast all summary
+*************************************
+
+~eBGP~
+CE1:
+conf t
+router bgp 400
+neighbor 24.0.0.2 remote-as 100
+network 10.10.10.0 mask 255.255.255.0
+
+CE2:
+conf t
+router bgp 500
+neighbor 35.0.0.3 remote-as 100
+network 10.10.20.0 mask 255.255.255.0
+
+PE1:
+conf t
+router bgp 100
+address-family ipv4 vrf CUSTOMER_A
+neighbor 24.0.0.4 remote-as 400
+do show bgp vpnv4 unicast vrf CUSTOMER_A summary
+do show bgp vpnv4 unicast vrf CUSTOMER_A
+
+PE2:
+conf t
+router bgp 100
+address-family ipv4 vrf CUSTOMER_A
+neighbor 35.0.0.5 remote-as 500
+do show bgp vpnv4 unicast vrf CUSTOMER_A summary
+do show bgp vpnv4 unicast vrf CUSTOMER_A
+----------------------------------------------
+
+~Verifications~
+CE1# show ip bgp
+CE1# ping 10.10.20.5 source loopback 1
+CE1# traceroute 10.10.20.5 source loopback 1
+
+PE1# show bgp vpnv4 unicast all 10.10.20.5
+PE1# show ip cef vrf CUSTOMER_A 10.10.20.5
+
+P# show mpls forwarding-table
+
+PE2# show mpls forwarding-table
+
+
+
+

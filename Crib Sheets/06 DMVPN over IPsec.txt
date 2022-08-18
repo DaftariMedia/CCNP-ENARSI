@@ -1,0 +1,156 @@
+DOWNLOAD A NEW COPY OF THE TOPOLOGY!!
+
+~Interfaces~
+HUB1:
+conf t
+interface Tunnel 0
+ip address 172.16.10.1 255.255.255.0
+ip nhrp authentication Pa55w.rd
+ip nhrp map multicast dynamic
+ip nhrp network-id 1
+tunnel source gi0/0
+tunnel mode gre multipoint
+
+SPOKE1:
+conf t
+interface Tunnel 0
+ip address 172.16.10.3 255.255.255.0
+ip nhrp authentication Pa55w.rd
+ip nhrp map 172.16.10.1 40.0.0.1
+ip nhrp map multicast 40.0.0.1
+ip nhrp network-id 1
+ip nhrp nhs 172.16.10.1
+tunnel source gi0/0
+tunnel mode gre multipoint
+
+SPOKE2:
+conf t
+interface Tunnel 0
+ip address 172.16.10.4 255.255.255.0
+ip nhrp authentication Pa55w.rd
+ip nhrp map 172.16.10.1 40.0.0.1
+ip nhrp map multicast 40.0.0.1
+ip nhrp network-id 1
+ip nhrp nhs 172.16.10.1
+tunnel source gi0/0
+tunnel mode gre multipoint
+
+show dmvpn
+*****************************************
+
+~EIGRP~
+HUB1:
+conf t
+router eigrp 100
+no auto-summary
+network 1.1.1.1 0.0.0.0
+network 172.16.10.0 0.0.0.255
+exit
+interface Tunnel 0
+no ip split-horizon eigrp 100
+
+HUB2:IGNORE
+
+SPOKE1:
+conf t
+router eigrp 100
+no auto-summary
+network 3.3.3.3 0.0.0.0
+network 172.16.10.0 0.0.0.255
+
+SPOKE2:
+conf t
+router eigrp 100
+no auto-summary
+network 4.4.4.4 0.0.0.0
+network 172.16.10.0 0.0.0.255
+
+show ip route eigrp
+*****************************************
+
+~IPsec~
+HUB1:
+conf t
+crypto isakmp policy 10
+authentication pre-share
+encryption aes 128
+group 1
+hash sha256
+exit
+crypto isakmp key Pa55w.rd address 0.0.0.0
+crypto ipsec transform-set DMVPN_TRANSFORM esp-aes esp-sha-hmac
+mode transport
+crypto ipsec profile DMVPN_PROFILE
+set transform-set DMVPN_TRANSFORM
+exit
+interface Tunnel 0
+tunnel protection ipsec profile DMVPN_PROFILE
+shutdown
+no shutdown
+
+HUB2: IGNORE
+
+SPOKE1:
+conf t
+crypto isakmp policy 10
+authentication pre-share
+encryption aes 128
+group 1
+hash sha256
+crypto isakmp key Pa55w.rd address 0.0.0.0
+crypto ipsec transform-set DMVPN_TRANSFORM esp-aes esp-sha-hmac
+mode transport
+crypto ipsec profile DMVPN_PROFILE
+set transform-set DMVPN_TRANSFORM
+exit
+interface Tunnel 0
+tunnel protection ipsec profile DMVPN_PROFILE
+shutdown
+no shutdown
+
+SPOKE2:
+conf t
+crypto isakmp policy 10
+authentication pre-share
+encryption aes 128
+group 1
+hash sha256
+crypto isakmp key Pa55w.rd address 0.0.0.0
+crypto ipsec transform-set DMVPN_TRANSFORM esp-aes esp-sha-hmac
+mode transport
+crypto ipsec profile DMVPN_PROFILE
+set transform-set DMVPN_TRANSFORM
+exit
+interface Tunnel 0
+tunnel protection ipsec profile DMVPN_PROFILE
+shutdown
+no shutdown
+
+
+show ip route eigrp
+show crypto isakmp sa
+HUB1# show crypto ipsec sa peer 40.0.0.3
+SPOKE1# traceroute 4.4.4.4 source 3.3.3.3
+----------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

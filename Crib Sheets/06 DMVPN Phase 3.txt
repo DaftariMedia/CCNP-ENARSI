@@ -1,0 +1,197 @@
+DOWNLOAD A NEW COPY OF THE TOPOLOGY!!
+
+~Tunnel Interfaces~
+HUB1:
+conf t
+interface Tunnel 0
+ip address 172.16.10.1 255.255.255.0
+ip nhrp authentication Pa55w.rd
+ip nhrp map multicast dynamic
+ip nhrp network-id 1
+tunnel source gi0/0
+tunnel mode gre multipoint
+ip nhrp redirect
+
+HUB2: IGNORE
+
+SPOKE1:
+conf t
+interface Tunnel 0
+ip address 172.16.10.3 255.255.255.0
+ip nhrp authentication Pa55w.rd
+ip nhrp map 172.16.10.1 40.0.0.1
+ip nhrp map multicast 40.0.0.1
+ip nhrp network-id 1
+ip nhrp nhs 172.16.10.1
+tunnel source gi0/0
+tunnel mode gre multipoint
+ip nhrp shortcut
+
+SPOKE2:
+conf t
+interface Tunnel 0
+ip address 172.16.10.4 255.255.255.0
+ip nhrp authentication Pa55w.rd
+ip nhrp map 172.16.10.1 40.0.0.1
+ip nhrp map multicast 40.0.0.1
+ip nhrp network-id 1
+ip nhrp nhs 172.16.10.1
+tunnel source gi0/0
+tunnel mode gre multipoint
+ip nhrp shortcut
+
+show dmvpn
+show dmvpn | begin Peer
+***************************************
+
+~EIGRP~
+HUB1:
+conf t
+router eigrp 100
+no auto-summary
+network 1.1.1.1 0.0.0.0
+network 172.16.10.0 0.0.0.255
+exit
+interface tunnel 0
+ip summary-address eigrp 100 0.0.0.0 0.0.0.0
+
+HUB2: IGNORE
+
+SPOKE1:
+conf t
+router eigrp 100
+no auto-summary
+network 3.3.3.3 0.0.0.0
+network 172.16.10.0 0.0.0.255
+
+SPOKE2:
+conf t
+router eigrp 100
+no auto-summary
+network 4.4.4.4 0.0.0.0
+network 172.16.10.0 0.0.0.255
+
+show ip route eigrp
+show ip eigrp neighbors
+SPOKE1# traceroute 4.4.4.4 source loopback 0
+SPOKE1# show ip route nhrp
+SPOKE1# show ip route nhrp | include 4.4.4.4
+*********************************************
+
+~OSPF~
+HUB1:
+conf t
+interface Tunnel 0
+ip ospf network point-to-multipoint
+exit
+router ospf 1
+network 1.1.1.1 0.0.0.0 area 0
+network 172.16.10.0 0.0.0.255 area 1
+
+HUB2: IGNORE
+
+SPOKE1:
+conf t
+interface Tunnel 0
+ip ospf network point-to-multipoint
+ip ospf priority 0
+router ospf 1
+network 3.3.3.3 0.0.0.0 area 1
+network 172.16.10.0 0.0.0.255 area 1
+
+SPOKE2:
+conf t
+interface Tunnel 0
+ip ospf network point-to-multipoint
+ip ospf priority 0
+router ospf 1
+network 4.4.4.4 0.0.0.0 area 1
+network 172.16.10.0 0.0.0.255 area 1
+
+show ip ospf neighbor
+show ip route ospf
+SPOKE1# traceroute 4.4.4.4 source loopback 0
+SPOKE1# show ip cef 4.4.4.4
+*********************************************
+
+~eBGP: Same AS on Spokes~
+HUB1:
+conf t
+ip route 0.0.0.0 0.0.0.0 Null0
+ip prefix-list DEFAULT_ROUTE permit 0.0.0.0/0
+route-map SPOKE_ROUTERS permit 10
+match ip address prefix-list DEFAULT_ROUTE
+exit
+router bgp 100
+bgp listen range 172.16.10.0/24 peer-group DMVPN_SPOKES
+neighbor DMVPN_SPOKES peer-group
+neighbor DMVPN_SPOKES remote-as 304
+neighbor DMVPN_SPOKES route-map SPOKE_ROUTERS out
+network 0.0.0.0 mask 0.0.0.0
+
+HUB2: IGNORE
+
+SPOKE1:
+conf t
+router bgp 304
+neighbor 172.16.10.1 remote-as 100
+network 3.3.3.3 mask 255.255.255.255
+
+SPOKE2:
+conf t
+router bgp 304
+neighbor 172.16.10.1 remote-as 100
+network 4.4.4.4 mask 255.255.255.255
+
+show ip route bgp
+show ip bgp
+SPOKE1# traceroute 4.4.4.4 source loopback 0
+------------------------------------------------------
+
+~iBGP~
+HUB1:
+conf t
+ip route 0.0.0.0 0.0.0.0 Null0
+ip prefix-list DEFAULT_ROUTE permit 0.0.0.0/0
+route-map SPOKE_ROUTERS permit 10
+match ip address prefix-list DEFAULT_ROUTE
+exit
+router bgp 134
+bgp listen range 172.16.10.0/24 peer-group DMVPN_SPOKES
+neighbor DMVPN_SPOKES peer-group
+neighbor DMVPN_SPOKES remote-as 134
+neighbor DMVPN_SPOKES route-map SPOKE_ROUTERS out
+network 0.0.0.0 mask 0.0.0.0
+
+HUB2: IGNORE
+
+SPOKE1:
+conf t
+router bgp 134
+neighbor 172.16.10.1 remote-as 134
+network 3.3.3.3 mask 255.255.255.255
+
+SPOKE2:
+conf t
+router bgp 134
+neighbor 172.16.10.1 remote-as 134
+network 4.4.4.4 mask 255.255.255.255
+
+show ip route bgp
+show ip bgp
+SPOKE1# traceroute 4.4.4.4 source loopback 0
+------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+

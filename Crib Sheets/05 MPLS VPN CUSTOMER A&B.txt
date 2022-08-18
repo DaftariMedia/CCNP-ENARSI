@@ -1,0 +1,175 @@
+~MPLS~
+PE1:
+conf t
+int gi0/2
+mpls ip
+
+P:
+conf t
+int range gi0/0, gi0/3
+mpls ip
+
+PE2:
+conf t
+int gi0/3
+mpls ip
+
+show mpls interfaces
+traceroute 3.3.3.3 source loopb 0
+*************************************
+
+
+~VRFs~
+PE1:
+conf t
+ip vrf CUSTOMER_A
+rd 100:1
+route-target both 100:10
+do show run | sec vrf
+exit
+int gi0/1
+ip vrf forwarding CUSTOMER_A
+ip add 24.0.0.2 255.255.255.0
+no shut
+do ping vrf CUSTOMER_A 24.0.0.4
+exit
+
+ip vrf CUSTOMER_B
+rd 100:2
+route-target both 100:20
+do show run | sec vrf
+exit
+int gi0/2
+ip vrf forwarding CUSTOMER_B
+ip add 26.0.0.2 255.255.255.0
+no shut
+do ping vrf CUSTOMER_B 26.0.0.6
+
+PE2:
+conf t
+ip vrf CUSTOMER_A
+rd 100:1
+route-target both 100:10
+do show run | sec vrf
+exit
+int gi0/1
+ip vrf forwarding CUSTOMER_A
+ip add 35.0.0.3 255.255.255.0
+no shut
+do ping vrf CUSTOMER_A 35.0.0.5
+exit
+
+ip vrf CUSTOMER_B
+rd 100:2
+route-target both 100:20
+do show run | sec vrf
+exit
+int gi0/2
+ip vrf forwarding CUSTOMER_B
+ip add 37.0.0.3 255.255.255.0
+no shut
+do ping vrf CUSTOMER_B 37.0.0.7
+*************************************
+
+~iBGP~
+PE1:
+router bgp 100
+neighbor 3.3.3.3 remote-as 100
+neighbor 3.3.3.3 update-source loopb 0
+address-family vpnv4
+neighbor 3.3.3.3 activate
+do show run | section bgp
+exit
+address-family ipv4
+no neighbor 3.3.3.3 activate
+do show run | section bgp
+do show bgp vpnv4 unicast all summary
+
+PE2:
+router bgp 100
+neighbor 2.2.2.2 remote-as 100
+neighbor 2.2.2.2 update-source loopb 0
+address-family vpnv4
+neighbor 2.2.2.2 activate
+do show run | section bgp
+exit
+address-family ipv4
+no neighbor 2.2.2.2 activate
+do show run | section bgp
+do show bgp vpnv4 unicast all summary
+*************************************
+
+~eBGP~
+CE1:
+conf t
+router bgp 400
+neighbor 24.0.0.2 remote-as 100
+network 10.10.10.0 mask 255.255.255.0
+
+CE2:
+conf t
+router bgp 500
+neighbor 35.0.0.3 remote-as 100
+network 10.10.20.0 mask 255.255.255.0
+
+CE3:
+conf t
+router bgp 600
+neighbor 26.0.0.2 remote-as 100
+network 10.10.10.0 mask 255.255.255.0
+
+CE4:
+conf t
+router bgp 700
+neighbor 37.0.0.3 remote-as 100
+network 10.10.20.0 mask 255.255.255.0
+
+PE1:
+conf t
+router bgp 100
+address-family ipv4 vrf CUSTOMER_A
+neighbor 24.0.0.4 remote-as 400
+do show bgp vpnv4 unicast vrf CUSTOMER_A summary
+do show bgp vpnv4 unicast vrf CUSTOMER_A
+exit
+router bgp 100
+address-family ipv4 vrf CUSTOMER_B
+neighbor 26.0.0.6 remote-as 600
+do show bgp vpnv4 unicast vrf CUSTOMER_B summary
+do show bgp vpnv4 unicast vrf CUSTOMER_B
+
+PE2:
+conf t
+router bgp 100
+address-family ipv4 vrf CUSTOMER_A
+neighbor 35.0.0.5 remote-as 500
+do show bgp vpnv4 unicast vrf CUSTOMER_A summary
+do show bgp vpnv4 unicast vrf CUSTOMER_A
+exit
+conf t
+router bgp 100
+address-family ipv4 vrf CUSTOMER_B
+neighbor 37.0.0.7 remote-as 700
+do show bgp vpnv4 unicast vrf CUSTOMER_B summary
+do show bgp vpnv4 unicast vrf CUSTOMER_B
+----------------------------------------------
+
+~Verifications~
+CE1# show ip bgp
+CE1# ping 10.10.20.5 source loopback 1
+CE1# traceroute 10.10.20.5 source loopback 1
+
+CE3# show ip bgp
+CE3# ping 10.10.20.7 source loopback 1
+CE3# traceroute 10.10.20.7 source loopback 1
+
+PE1# show bgp vpnv4 unicast all 10.10.20.5
+PE1# show ip cef vrf CUSTOMER_A 10.10.20.5
+
+PE1# show bgp vpnv4 unicast all 10.10.20.7
+PE1# show ip cef vrf CUSTOMER_B 10.10.20.7
+
+PE2# show mpls forwarding-table
+
+P# show mpls forwarding-table
+
