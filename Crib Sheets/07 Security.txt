@@ -1,0 +1,322 @@
+NOTE:
+??? means, configuration only possible on physical device ONLY.
+
+~CoPP - Control Plane Policing~
+R1:
+configure terminal
+ip access-list extended ICMP
+permit icmp any any
+exit
+ip access-list extended TELNET
+permit tcp any any eq 23
+exit
+ip access-list extended OSPF
+permit ospf any any
+exit
+class-map ICMP
+match access-group name ICMP
+exit
+class-map TELNET
+match access-group name TELNET
+exit
+class-map OSPF
+match access-group name OSPF
+exit
+policy-map COPP
+class ICMP
+police 8000 conform-action transmit exceed-action transmit
+exit
+class TELNET
+police 8000 conform-action transmit exceed-action transmit
+exit
+class OSPF
+police 8000 conform-action transmit exceed-action transmit
+exit
+control-plane
+service-policy input COPP
+
+R2: ping 10.10.10.1 repeat 10000
+
+R1# show policy-map control-plane
+R1# show policy-map control-plane input class ICMP
+----------------------------------------------------------
+
+~MPP - Management Plane Protection~ ???
+R1:
+configure terminal
+control-plane host
+management-interface gi0/0 allow telnet
+do show management-interface
+do show management-interface protocol telnet
+**********************************************************
+
+~Extended ACLs~
+R1:
+configure terminal
+ip http server
+access-list 100 deny tcp 10.10.10.2 0.0.0.255 host 1.1.1.1 eq 80
+access-list 100 permit ip any any log
+interface gi0/0
+ip access-group 100 in
+do show access-lists
+
+R2:
+telnet 1.1.1.1 80
+***********************************************************
+
+~Time Based ACLs~
+R1:
+clock set 9:20:00 23 August 2022
+configure terminal
+no access-list 100
+time-range WORK_HOURS
+periodic weekdays 9:00 to 17:00
+exit
+ip access-list extended NO_SOCIALMEDIA
+deny tcp any host 10.10.10.1 eq 80 time-range WORK_HOURS
+permit ip any any
+exit
+int gi0/0
+ip access-group NO_SOCIALMEDIA in
+do show access-lists
+
+R3# telnet 1.1.1.1 80
+***********************************************************
+
+~Prefix-List~
+R2:
+configure terminal
+ip prefix-list NO_NET6 seq 5 deny 6.6.6.6/32
+ip prefix-list NO_NET6 seq 10 permit 0.0.0.0/0 ge 24
+router ospf 1
+distribute-list prefix NO_NET6 in
+do show ip route ospf
+***********************************************************
+
+~uRPF~
+^^^Strict Mode^^^
+
+
+
+^^^Loose Mode^^^
+
+
+***********************************************************
+
+~DHCP Relay~
+R6:
+configure terminal
+ip dhcp excluded-address 10.10.10.1 10.10.10.20
+ip dhcp pool NET10
+network 10.10.10.0 255.255.255.0
+default-router 10.10.10.3
+dns-server 10.10.10.3
+lease 0 8 30
+
+R3:
+configure terminal
+interface gi0/3
+ip helper-address 10.10.20.6
+
+PC:
+ip dhcp
+show ip
+
+R6:
+show ip dhcp binding
+***********************************************************
+
+~Dynamic ARP Inspection~
+S1:
+enable
+configure terminal
+ip arp inspection vlan 1
+interface vlan 1
+no shutdown
+interface gi0/3
+ip dhcp snooping trust
+do show ip arp inspection
+interface gi3/3
+ip arp inspection limit rate 8 burst interval 4
+do show ip arp inspection interfaces
+----------------------------------------------------------
+
+~DHCP Snooping~
+S1:
+enable
+configure terminal
+ip dhcp snooping
+ip dhcp snooping vlan 1
+interface vlan 1
+no shutdown
+interface gi0/3
+ip dhcp snooping trust
+
+show ip dhcp snooping
+show ip dhcp snooping binding
+----------------------------------------------------------
+
+~IPSG -IP Source Guard~
+S1:
+enable
+configure terminal
+interface gi3/3
+ip verify source
+switchport port-security
+do show ip verify source
+
+configure terminal
+ip source binding 5c26.0a70.c59a vlan 1 10.10.10.254 int gi2/2
+int gi2/2
+switchport port-security
+ip verify source port-security
+do show ip source binding
+do show ip verify source
+***********************************************************
+
+~IPv6 RA Guard~
+R5:
+conf t
+ipv6 unicast-routing
+interface gi0/1
+ipv6 address autoconfig default
+do show ipv6 routers
+
+R4:
+conf t
+ipv6 unicast-routing
+interface gi0/1
+ipv6 address 2001:DB8:BAD:BAD::3/64
+ipv6 nd router-preference high
+do show ipv6 routers
+
+R5# show ipv6 routers
+
+S2: USING HOST POLICY
+enable
+configure terminal
+ipv6 nd raguard policy HOSTS
+device-role host
+exit
+interface gi0/3
+ipv6 nd raguard attach-policy HOSTS
+do show ipv6 nd raguard policy HOSTS
+do show ipv6 snooping counters interface gi1/1
+
+
+S2: USING ROUTER POLICY
+enable
+configure terminal
+ipv6 nd raguard policy ROUTERS
+device-role router
+exit
+ipv6 prefix-list PREFIX01 permit 2001:DB8:10::/64
+ipv6 nd raguard policy ROUTERS
+match ra prefix-list PREFIX01
+exit
+interface gi1/1
+ipv6 nd raguard attach-policy ROUTERS
+do show ipv6 nd raguard policy ROUTERS
+show ipv6 snooping counters interface gi1/1
+---------------------------------------------------
+
+~IPv6 Source Guard~
+R6:
+configure terminal
+ipv6 unicast-routing
+ipv6 dhcp pool POOL1
+address prefix 2001:DB8:10::/64
+interface gi0/1
+ipv6 enable
+ipv6 dhcp server POOL1
+do show ipv6 dhcp binding
+
+R5:
+configure terminal
+ipv6 unicast-routing
+interface gi0/1
+ipv6 address autoconfig default
+do show ipv6 interface brief | include 2001
+do ping 2001:DB8:10::10
+
+S2:
+configure terminal
+ipv6 snooping policy SNOOPING
+security-level glean
+ipv6 snooping attach-policy SNOOPING
+do show ipv6 neighbors binding
+ipv6 source-guard policy SOURCE_GUARD
+deny global-autoconf
+ipv6 source-guard attach-policy SOURCE_GUARD
+do show ipv6 dhcp binding
+---------------------------------------------------
+
+~IPv6 ND Inspection~ ???
+R4:
+configure terminal
+interface gi0/1
+ipv6 address 2001:DB8:10::3/64
+
+S2:
+enable
+configure terminal
+interface range gi0/3, gi1/0
+ipv6 nd inspection
+
+R5# ping 2001:DB8:10::3
+S2# show ipv6 neighbors binding
+---------------------------------------------------
+
+~IPv6 DHCPv6 Guard~ ???
+R6:
+conf t
+ipv6 unicast-routing
+ipv6 dhcp pool POOL1
+address prefix 2001:DB8:10::/64
+interface gi0/1
+ipv6 enable
+ipv6 dhcp server POOL1
+
+R5:
+conf t
+interface gi0/1
+ipv6 enable
+ipv6 address dhcp
+
+R5# show ipv6 dhcp binding
+R4# show ipv6 interface brief | include 2001
+
+S2:
+enable
+configure terminal
+ipv6 dhcp guard policy DHCP_SERVER
+device-role server
+exit
+ipv6 dhcp guard policy DHCP_CLIENT
+device-role client
+exit
+interface gi5/5
+ipv6 dhcp guard attach-policy DHCP_SERVER
+interface gi4/4
+ipv6 dhcp guard attach-policy DHCP_CLIENT
+do show ipv6 dhcp guard policy
+
+R4: ROUGE DHCP
+configure terminal
+ipv6 unicast-routing
+no ipv6 dhcp pool ROGUE_POOL
+address prefix 2001:DB8:BAD:C0DE::/64
+exit
+interface gi0/1
+ipv6 enable
+ipv6 dhcp server ROGUE_POOL
+
+SW2# debug ipv6 snooping dhcp-guard
+R5# clear ipv6 dhcp client gi0/1
+*****************************************************
+
+
+
+
+
+
